@@ -9,16 +9,18 @@
     name="InternalName goes here"
     type="win32"/>
 <!-- We do not want themes support
-  <dependency>
-    <dependentassembly>
-    <assemblyidentity type="win32"
-      name="Microsoft.Windows.Common-Controls"
-      version="6.0.0.0"
-      publickeytoken="6595b64144ccf1df"
-      language="*" processorarchitecture="*">
-      </assemblyidentity>
-      </dependentassembly>
-  <dependency>
+  <dependency> 
+    <dependentAssembly>
+      <assemblyIdentity
+        type="win32" 
+        name="Microsoft.Windows.Common-Controls"
+        version="6.0.0.0"
+        publicKeyToken="6595b64144ccf1df"
+        language="*"
+        processorArchitecture="*"
+      />
+    </dependentAssembly>
+  </dependency>
  -->
   <description>FileDescription goes here</description>
   <!-- COMPATIBILITY SECTION SPECIFIES IF APP IS COMPLIANT 
