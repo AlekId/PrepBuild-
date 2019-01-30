@@ -247,6 +247,8 @@ var
   Manifest: string;
   IgnoreManifestErrors: Boolean;
   s: string;
+  Theming: string;
+  ThemingAccess: IThemingAccess;
 begin
   try
     WriteLn('dzPrepBuild version ' + TApplication_GetFileVersion + ' built ' + TApplication_GetProductVersion);
@@ -449,12 +451,32 @@ begin
       else
         IgnoreManifestErrors := False;
 
+      if FGetOpt.OptionPassed('Theming', Param) then begin
+        if SameText(Param, 'ON') then
+          Theming := 'ON'
+        else if SameText(Param, 'OFF') then
+          Theming := 'OFF'
+        else
+          raise Exception.CreateFmt(_('Parameter for Theming ("%s") must be ON or OFF'), [Param]);
+      end else
+        Theming := '';
+
       if FGetOpt.OptionPassed('UpdateManifest') then begin
         try
           if InputManifest <> '' then
             WriteLn('Reading manifest from ', InputManifest);
           VerInfoAccess := Tdm_ManifestVersionInfo.Create(Manifest, InputManifest);
           WriteLn('Updating ', VerInfoAccess.VerInfoFilename);
+          if Theming <> '' then begin
+            ThemingAccess := VerInfoAccess as IThemingAccess;
+            if Theming = 'ON' then begin
+              WriteLn('Enableing theme support');
+              ThemingAccess.EnableTheming;
+            end else begin
+              WriteLn('Disableing theme support');
+              ThemingAccess.DisableTheming;
+            end;
+          end;
           VerInfoAccess.WriteToFile(VersionInfo);
         except
           on e: Exception do begin
@@ -549,6 +571,7 @@ begin
   FGetOpt.RegisterOption('Manifest', _('Name of the .manifest file for the UpdateManifest and WriteManifestRc options'), True);
   FGetOpt.RegisterOption('UpdateManifest', _('update the .manifest file (given with the Manifest option) with the version information'));
   FGetOpt.RegisterOption('IgnoreManifestErrors', _('ignore any errors caused by the UpdateManifest option'));
+  FGetOpt.RegisterOption('Theming', _('Set theming support: Value must be ON or OFF'), True);
   FGetOpt.RegisterOption('WriteManifestRc', _('Write an .rc file for embedding the .manifest file given with the Manifest option'), True);
 
   FGetOpt.RegisterOption('Icon', _('Assign an icon file to add to the .rc file'), True);

@@ -14,12 +14,20 @@ uses
   i_VersionInfoAccess;
 
 type
-  Tdm_ManifestVersionInfo = class(TDataModule, IVersionInfoAccess)
+  IThemingAccess = interface ['{AFA7C417-A4E7-43DB-A2BF-49C2157A33E7}']
+    procedure DisableTheming;
+    procedure EnableTheming;
+  end;
+
+type
+  Tdm_ManifestVersionInfo = class(TDataModule, IVersionInfoAccess, IThemingAccess)
     ProjDoc: TXMLDocument;
   private
     FInputFilename: string;
     FOutputFilename: string;
     FDescriptionNode: IXMLNode;
+    FAssemblyIdentityNode: IXMLNode;
+    function FindComCtlNode(out _DependentAssemblyNode: IXMLNode): boolean;
   protected // IInterface
     FRefCount: Integer;
     function QueryInterface(const IID: TGUID; out Obj): HResult; override; stdcall;
@@ -29,8 +37,10 @@ type
     function VerInfoFilename: string;
     procedure ReadFromFile(_VerInfo: TVersionInfo);
     procedure WriteToFile(_VerInfo: TVersionInfo);
+  protected // IThemingAccess
+    procedure DisableTheming;
+    procedure EnableTheming;
   protected
-    FAssemblyIdentityNode: IXMLNode;
     procedure InitVersionNodes; virtual;
   public
     constructor Create(const _ManifestFile: string; const _InputFile: string = ''); reintroduce;
@@ -61,6 +71,7 @@ begin
 
   TFileSystem.FileExists(FInputFilename, True);
 
+  ProjDoc.Options := ProjDoc.Options + [doNodeAutoIndent] - [doNodeAutoCreate, doAttrNull, doAutoSave];
   ProjDoc.FileName := FInputFilename;
   ProjDoc.Active := True;
 
@@ -80,14 +91,100 @@ end;
 //  end;
 //end;
 
+function Tdm_ManifestVersionInfo.FindComCtlNode(out _DependentAssemblyNode: IXMLNode): boolean;
+var
+  AssemblyNode: IXMLNode;
+  DependencyNode: IXMLNode;
+  DependentAssemblyNode: IXMLNode;
+  AssemblyIdentityNode: IXMLNode;
+begin
+  Result := False;
+  AssemblyNode := ProjDoc.DocumentElement;
+  DependencyNode := AssemblyNode.ChildNodes.FindNode('dependency');
+  while Assigned(DependencyNode) do begin
+    DependentAssemblyNode := DependencyNode.ChildNodes.FindNode('dependentAssembly');
+    if not Assigned(DependentAssemblyNode) then begin
+      // This is an error:
+      // According to https://docs.microsoft.com/en-us/windows/desktop/sbscs/application-manifests
+      // the dependency node must contain at least one dependendAssembly node.
+      Exit; //==>
+    end;
+    AssemblyIdentityNode := DependentAssemblyNode.ChildNodes.FindNode('assemblyIdentity');
+    if not Assigned(AssemblyIdentityNode) then begin
+      // This is an error:
+      // According to https://docs.microsoft.com/en-us/windows/desktop/sbscs/application-manifests
+      // the dependendAssembly node must contain exactly one assemblyIdentityNode node.
+      Exit; //==>
+    end;
+    if not AssemblyIdentityNode.HasAttribute('name') then begin
+      // this is an error
+      Exit;
+    end;
+    if AssemblyIdentityNode.Attributes['name'] = 'Microsoft.Windows.Common-Controls' then begin
+      Result := True;
+      _DependentAssemblyNode := DependentAssemblyNode;
+      Exit; //==>
+    end;
+    DependentAssemblyNode := nil;
+    DependencyNode := DependencyNode.NextSibling;
+  end;
+end;
+
+procedure Tdm_ManifestVersionInfo.DisableTheming;
+var
+  DependentAssemblyNode: IXMLNode;
+  DependencyNode: IXMLNode;
+  AssemblyNode: IXMLNode;
+  DependencyIdx: Integer;
+begin
+  if not FindComCtlNode(DependentAssemblyNode) then begin
+    // Node does not exist, so theming is already disabled
+    Exit; //==>
+  end;
+
+  AssemblyNode := ProjDoc.DocumentElement;
+  DependencyNode := DependentAssemblyNode.ParentNode;
+  DependentAssemblyNode := nil;
+
+  DependencyIdx := AssemblyNode.ChildNodes.IndexOf(DependencyNode);
+  AssemblyNode.ChildNodes.Delete(DependencyIdx);
+end;
+
+procedure Tdm_ManifestVersionInfo.EnableTheming;
+var
+  DependentAssemblyNode: IXMLNode;
+  DependencyNode: IXMLNode;
+  AssemblyNode: IXMLNode;
+  DescriptionIdx: Integer;
+begin
+  if FindComCtlNode(DependentAssemblyNode) then begin
+    // Node already exists, so theming is already enabled
+    Exit; //==>
+  end;
+
+  AssemblyNode := ProjDoc.DocumentElement;
+
+  // we must insert the dependency element before the description element, otherwise the application won't start
+  DescriptionIdx := AssemblyNode.ChildNodes.IndexOf('description');
+
+  DependencyNode := AssemblyNode.AddChild('dependency', DescriptionIdx);
+  DependentAssemblyNode := DependencyNode.AddChild('dependentAssembly');
+  DependentAssemblyNode.Attributes['type'] := 'win32';
+  DependentAssemblyNode.Attributes['name'] := 'Microsoft.Windows.Common-Controls';
+  DependentAssemblyNode.Attributes['version'] := '6.0.0.0';
+  DependentAssemblyNode.Attributes['publicKeyToken'] := '6595b64144ccf1df';
+  DependentAssemblyNode.Attributes['language'] := '*';
+  DependentAssemblyNode.Attributes['processorArchitecture'] := '*';
+end;
+
 procedure Tdm_ManifestVersionInfo.InitVersionNodes;
 var
-  Assembly: IXMLNode;
+  AssemblyNode: IXMLNode;
 begin
-  Assembly := ProjDoc.DocumentElement;
+  AssemblyNode := ProjDoc.DocumentElement;
 
-  FAssemblyIdentityNode := Assembly.ChildNodes['assemblyIdentity'];
-  FDescriptionNode := Assembly.ChildNodes['description'];
+  FAssemblyIdentityNode := AssemblyNode.ChildNodes['assemblyIdentity'];
+  FDescriptionNode := AssemblyNode.ChildNodes['description'];
 end;
 
 function Tdm_ManifestVersionInfo.VerInfoFilename: string;
